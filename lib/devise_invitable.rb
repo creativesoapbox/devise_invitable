@@ -62,6 +62,11 @@ module Devise
   # the #invited_by association is declared to be polymorphic. (default: nil)
   mattr_accessor :invited_by_class_name
   @@invited_by_class_name = nil
+
+  # Public: A method to use to validate the model before sending invitation
+  # useful for running validations that only apply when a model is being invited
+  mattr_accessor :validate_invitation_with
+  @@validate_invitation_with = nil
 end
 
 Devise.add_module :invitable, :controller => :invitations, :model => 'devise_invitable/model', :route => :invitation

@@ -208,6 +208,7 @@ module Devise
           self.invitation_token   = self.class.invitation_token
         end
 
+
       module ClassMethods
         # Return fields to invite
         def invite_key_fields
@@ -219,6 +220,12 @@ module Devise
           end
         end
 
+        def respect_validation_errors?(invitable)
+          self.validate_on_invite ||
+            self.validate_invitation_with ||
+            !invitable.invite_key_valid?
+        end
+
         # Attempt to find a user by it's email. If a record is not found, create a new
         # user and send invitation to it. If user is found, returns the user with an
         # email already exists error.
@@ -227,19 +234,25 @@ module Devise
         # Attributes must contain the user email, other attributes will be set in the record
         def _invite(attributes={}, invited_by=nil, &block)
           invite_key_array = invite_key_fields
-          attributes_hash = {}
-          invite_key_array.each do |k,v|
-            attributes_hash[k] = attributes.delete(k).to_s.strip
+          attributes_hash = invite_key_fields.inject({}) do |attrs, k|
+            attrs[k] = attributes.delete(k).to_s.strip; attrs
           end
 
-          invitable = find_or_initialize_with_errors(invite_key_array, attributes_hash)
+          invitable = find_or_initialize_with_errors(invite_key_fields, attributes_hash)
+
           invitable.assign_attributes(attributes)
           invitable.invited_by = invited_by
-
           invitable.skip_password = true
+
+          if self.validate_invitation_with
+            invitable.errors.clear
+            invitable.send(self.validate_invitation_with)
+          end
+
           invitable.valid? if self.validate_on_invite
+
           if invitable.new_record?
-            invitable.errors.clear if !self.validate_on_invite and invitable.invite_key_valid?
+            invitable.errors.clear unless respect_validation_errors?(invitable)
           elsif !invitable.invited_to_sign_up? || !self.resend_invitation
             invite_key_array.each do |key|
               invitable.errors.add(key, :taken)
@@ -250,6 +263,7 @@ module Devise
             yield invitable if block_given?
             mail = invitable.invite!
           end
+
           [invitable, mail]
         end
 
@@ -298,6 +312,7 @@ module Devise
         Devise::Models.config(self, :invitation_limit)
         Devise::Models.config(self, :invite_key)
         Devise::Models.config(self, :resend_invitation)
+        Devise::Models.config(self, :validate_invitation_with)
       end
     end
   end
